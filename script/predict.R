@@ -7,13 +7,15 @@ library(factoextra)  # visualizaciones de clustering
 library(cluster)     # silhouette(), clusGap()
 library(here)
 
-source(here("some", "path", "below", "your", "project", "root.txt"))
+source(here("script", "clean.R"))
 
 # ---------- 2. Cargar / preparar los datos ----------
 # Suponiendo que agg_anual ya está en memoria; de lo contrario, leer CSV o RDS
 # Seleccionamos solo variables numéricas
+agg_anual <- agg_anual %>% 
+  sample_n(100)
+
 agg_num <- agg_anual %>% 
-  sample_n(100) %>% 
   select(where(is.numeric)) %>%        # total_exports, prop_aereo, etc.
   drop_na()                            # elimina filas con NA en cualquiera
 
@@ -82,6 +84,68 @@ fviz_cluster(km_fit,
              ellipse.type = "convex",
              repel = TRUE,
              ggtheme = theme_minimal())
+
+library(tidyverse)
+library(ggrepel)
+
+# 1. PCA
+pca <- prcomp(agg_scaled)
+
+# 2. Dataset con componentes y clúster
+pca_df <- as.data.frame(pca$x[, 1:2]) %>%
+  mutate(cluster = factor(km_fit$cluster),
+         partnerISO = agg_clusters$partnerISO)  # ISO 3
+
+# 3. Visualización con etiquetas
+ggplot(pca_df, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point(alpha = 0.6, size = 2.5) +
+  geom_text_repel(aes(label = partnerISO), size = 3, max.overlaps = 200) +  # Etiquetas ISO
+  stat_ellipse(type = "norm", linetype = "dashed", alpha = 0.3) +
+  labs(title = "Clustering con K-means y PCA",
+       subtitle = "Etiquetas: partnerISO",
+       x = "Componente Principal 1",
+       y = "Componente Principal 2",
+       color = "Clúster") +
+  theme_minimal(base_size = 13)
+
+
+#============ TOP 10
+
+library(tidyverse)
+library(ggrepel)
+
+# ---------- 1. Hacer PCA ----------
+pca <- prcomp(agg_scaled)
+
+# ---------- 2. Construir data.frame con componentes y clúster ----------
+pca_df <- as.data.frame(pca$x[, 1:2]) %>%
+  mutate(cluster = factor(km_fit$cluster),
+         partnerISO = agg_clusters$partnerISO)
+
+# ---------- 3. Identificar los ISO más representados ----------
+top_iso <- pca_df %>%
+  count(partnerISO, sort = TRUE) %>%
+  slice_max(n, n = 10) %>%
+  pull(partnerISO)
+
+# ---------- 4. Visualización final ----------
+ggplot(pca_df, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point(alpha = 0.6, size = 2.5) +
+  geom_text_repel(
+    data = filter(pca_df, partnerISO %in% top_iso),
+    aes(label = partnerISO),
+    size = 3.5,
+    max.overlaps = Inf,
+    box.padding = 0.5
+  ) +
+  stat_ellipse(type = "norm", linetype = "dashed", alpha = 0.3) +
+  labs(title = "Visualización de Clustering con K-means y PCA",
+       subtitle = "Se muestran etiquetas de los 10 países más frecuentes (ISO 3)",
+       x = "Componente Principal 1",
+       y = "Componente Principal 2",
+       color = "Clúster") +
+  theme_minimal(base_size = 14)
+
 
 ## Métricas
 
